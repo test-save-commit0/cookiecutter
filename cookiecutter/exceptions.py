@@ -26,8 +26,6 @@ class UnknownTemplateDirException(CookiecutterException):
     template, e.g. more than one dir appears to be a template dir.
     """
 
-    # unused locally
-
 
 class MissingProjectDir(CookiecutterException):
     """
@@ -36,8 +34,6 @@ class MissingProjectDir(CookiecutterException):
     Raised during cleanup when remove_repo() can't find a generated project
     directory inside of a repo.
     """
-
-    # unused locally
 
 
 class ConfigDoesNotExistException(CookiecutterException):
@@ -124,10 +120,8 @@ class UndefinedVariableInTemplate(CookiecutterException):
     def __str__(self):
         """Text representation of UndefinedVariableInTemplate."""
         return (
-            f"{self.message}. "
-            f"Error message: {self.error.message}. "
-            f"Context: {self.context}"
-        )
+            f'{self.message}. Error message: {self.error.message}. Context: {self.context}'
+            )
 
 
 class UnknownExtension(CookiecutterException):

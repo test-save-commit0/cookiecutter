@@ -1,7 +1,5 @@
 """Jinja2 environment and extensions loading."""
-
 from jinja2 import Environment, StrictUndefined
-
 from cookiecutter.exceptions import UnknownExtension
 
 
@@ -22,16 +20,12 @@ class ExtensionLoaderMixin:
         3. Attempts to load the extensions. Provides useful error if fails.
         """
         context = kwargs.pop('context', {})
-
-        default_extensions = [
-            'cookiecutter.extensions.JsonifyExtension',
+        default_extensions = ['cookiecutter.extensions.JsonifyExtension',
             'cookiecutter.extensions.RandomStringExtension',
             'cookiecutter.extensions.SlugifyExtension',
             'cookiecutter.extensions.TimeExtension',
-            'cookiecutter.extensions.UUIDExtension',
-        ]
+            'cookiecutter.extensions.UUIDExtension']
         extensions = default_extensions + self._read_extensions(context)
-
         try:
             super().__init__(extensions=extensions, **kwargs)
         except ImportError as err:
@@ -43,12 +37,7 @@ class ExtensionLoaderMixin:
         If context does not contain the relevant info, return an empty
         list instead.
         """
-        try:
-            extensions = context['cookiecutter']['_extensions']
-        except KeyError:
-            return []
-        else:
-            return [str(ext) for ext in extensions]
+        pass
 
 
 class StrictEnvironment(ExtensionLoaderMixin, Environment):
