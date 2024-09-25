@@ -52,7 +52,76 @@ def cookiecutter(template, checkout=None, no_input=False, extra_context=
     :param keep_project_on_failure: If `True` keep generated project directory even when
         generation fails
     """
-    pass
+    # Get user configuration
+    config_dict = get_user_config(config_file=config_file, default_config=default_config)
+
+    # Determine the template directory
+    repo_dir, cleanup = determine_repo_dir(
+        template=template,
+        checkout=checkout,
+        clone_to_dir=config_dict['cookiecutters_dir'],
+        no_input=no_input,
+        password=password,
+        directory=directory
+    )
+
+    # Ensure cleanup function is called
+    try:
+        with _patch_import_path_for_repo(repo_dir):
+            # Run pre-prompt hook
+            if accept_hooks:
+                run_pre_prompt_hook(repo_dir, config_dict)
+
+            # Generate or load context
+            context_file = os.path.join(repo_dir, 'cookiecutter.json')
+            context = generate_context(
+                context_file=context_file,
+                default_context=config_dict['default_context'],
+                extra_context=extra_context,
+            )
+
+            # Prompt the user to manually configure the context
+            if not no_input:
+                nested_template = choose_nested_template(repo_dir, context)
+                if nested_template:
+                    repo_dir = os.path.join(repo_dir, nested_template)
+                    context_file = os.path.join(repo_dir, 'cookiecutter.json')
+                    context = generate_context(
+                        context_file=context_file,
+                        default_context=config_dict['default_context'],
+                        extra_context=extra_context,
+                    )
+                context = prompt_for_config(context, no_input)
+
+            # Load context from replay file
+            if replay:
+                context = load(config_dict['replay_dir'], template)
+
+            # Create project from local context
+            project_dir = generate_files(
+                repo_dir=repo_dir,
+                context=context,
+                overwrite_if_exists=overwrite_if_exists,
+                skip_if_file_exists=skip_if_file_exists,
+                output_dir=output_dir,
+                accept_hooks=accept_hooks,
+            )
+
+    except Exception:
+        # Cleanup on failure
+        if cleanup and not keep_project_on_failure:
+            if os.path.exists(project_dir):
+                rmtree(project_dir)
+        raise
+    else:
+        # Successful project creation
+        dump(config_dict['replay_dir'], template, context)
+
+    finally:
+        if cleanup:
+            cleanup()
+
+    return project_dir
 
 
 class _patch_import_path_for_repo:
