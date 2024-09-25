@@ -22,7 +22,11 @@ def valid_hook(hook_file, hook_name):
     :param hook_name: The hook to find
     :return: The hook file validity
     """
-    pass
+    return (
+        hook_file.startswith(hook_name) and
+        hook_file.endswith(('.py', '.sh')) and
+        not hook_file.endswith('.pyc')
+    )
 
 
 def find_hook(hook_name, hooks_dir='hooks'):
@@ -37,7 +41,15 @@ def find_hook(hook_name, hooks_dir='hooks'):
     :param hooks_dir: The hook directory in the template
     :return: The absolute path to the hook script or None
     """
-    pass
+    hooks_dir = os.path.abspath(hooks_dir)
+    if not os.path.isdir(hooks_dir):
+        return None
+
+    for hook_file in os.listdir(hooks_dir):
+        if valid_hook(hook_file, hook_name):
+            return os.path.join(hooks_dir, hook_file)
+
+    return None
 
 
 def run_script(script_path, cwd='.'):
@@ -46,7 +58,11 @@ def run_script(script_path, cwd='.'):
     :param script_path: Absolute path to the script to run.
     :param cwd: The directory to run the script from.
     """
-    pass
+    with work_in(cwd):
+        if script_path.endswith('.py'):
+            subprocess.check_call([sys.executable, script_path], cwd=cwd)
+        else:
+            subprocess.check_call([script_path], cwd=cwd)
 
 
 def run_script_with_context(script_path, cwd, context):
@@ -56,7 +72,25 @@ def run_script_with_context(script_path, cwd, context):
     :param cwd: The directory to run the script from.
     :param context: Cookiecutter project template context.
     """
-    pass
+    env = create_env_with_context(context)
+    with open(script_path, 'r') as f:
+        script = f.read()
+
+    try:
+        rendered_script = env.from_string(script).render(**context)
+    except UndefinedError as err:
+        msg = f"Unable to render script '{script_path}': {err.message}"
+        raise FailedHookException(msg)
+
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_script:
+        temp_script.write(rendered_script)
+        temp_script.flush()
+        temp_script_path = temp_script.name
+
+    try:
+        run_script(temp_script_path, cwd)
+    finally:
+        os.remove(temp_script_path)
 
 
 def run_hook(hook_name, project_dir, context):
@@ -67,7 +101,13 @@ def run_hook(hook_name, project_dir, context):
     :param project_dir: The directory to execute the script from.
     :param context: Cookiecutter project context.
     """
-    pass
+    hook_path = find_hook(hook_name)
+    if hook_path:
+        logger.debug(f"Running hook {hook_name}")
+        if hook_path.endswith('.py'):
+            run_script_with_context(hook_path, project_dir, context)
+        else:
+            run_script(hook_path, project_dir)
 
 
 def run_hook_from_repo_dir(repo_dir, hook_name, project_dir, context,
@@ -81,7 +121,28 @@ def run_hook_from_repo_dir(repo_dir, hook_name, project_dir, context,
     :param delete_project_on_failure: Delete the project directory on hook
         failure?
     """
-    pass
+    with work_in(repo_dir):
+        try:
+            run_hook(hook_name, project_dir, context)
+        except FailedHookException:
+            if delete_project_on_failure:
+                logger.debug(
+                    "Hook script failed ({}). Removing project directory {}"
+                    .format(hook_name, project_dir)
+                )
+                rmtree(project_dir)
+            raise
+        except Exception:
+            # Log the exception here, but do not raise it,
+            # to avoid a cryptic error message
+            logger.exception(f'Hook script failed ({hook_name})')
+            if delete_project_on_failure:
+                logger.debug(
+                    "Hook script failed ({}). Removing project directory {}"
+                    .format(hook_name, project_dir)
+                )
+                rmtree(project_dir)
+            raise
 
 
 def run_pre_prompt_hook(repo_dir: 'os.PathLike[str]') ->Path:
@@ -89,4 +150,16 @@ def run_pre_prompt_hook(repo_dir: 'os.PathLike[str]') ->Path:
 
     :param repo_dir: Project template input directory.
     """
-    pass
+    with work_in(repo_dir):
+        hook_path = find_hook('pre_prompt')
+        if hook_path:
+            logger.debug("Running pre_prompt hook")
+            tmp_repo_dir = create_tmp_repo_dir()
+            try:
+                run_script(hook_path, tmp_repo_dir)
+                return Path(tmp_repo_dir)
+            except Exception:
+                logger.exception('Pre-prompt hook failed')
+                rmtree(tmp_repo_dir)
+                raise
+    return Path(repo_dir)
