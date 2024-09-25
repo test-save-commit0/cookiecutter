@@ -13,17 +13,41 @@ from cookiecutter.main import cookiecutter
 
 def version_msg():
     """Return the Cookiecutter version, location and Python powering it."""
-    pass
+    python_version = sys.version[:3]
+    location = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return f"Cookiecutter {__version__} from {location} (Python {python_version})"
 
 
 def validate_extra_context(ctx, param, value):
     """Validate extra context."""
-    pass
+    for s in value:
+        if '=' not in s:
+            raise click.BadParameter(
+                f'"{s}" is not a valid key/value pair. '
+                'Use the format key=value.'
+            )
+    return collections.OrderedDict(v.split('=', 1) for v in value)
 
 
 def list_installed_templates(default_config, passed_config_file):
     """List installed (locally cloned) templates. Use cookiecutter --list-installed."""
-    pass
+    config = get_user_config(default_config=default_config, config_file=passed_config_file)
+    template_dir = config.get('cookiecutters_dir')
+    if not os.path.exists(template_dir):
+        click.echo(f"No templates found in {template_dir}")
+        return
+
+    template_names = [
+        d for d in os.listdir(template_dir)
+        if os.path.isdir(os.path.join(template_dir, d))
+    ]
+
+    if not template_names:
+        click.echo(f"No templates found in {template_dir}")
+    else:
+        click.echo("Installed templates:")
+        for template_name in template_names:
+            click.echo(f"  {template_name}")
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -74,7 +98,37 @@ def main(template, extra_context, no_input, checkout, verbose, replay,
     volunteers. If you would like to help out or fund the project, please get
     in touch at https://github.com/cookiecutter/cookiecutter.
     """
-    pass
+    if list_installed:
+        list_installed_templates(default_config, config_file)
+        return
+
+    configure_logger(stream_level='DEBUG' if verbose else 'INFO',
+                     debug_file=debug_file)
+
+    try:
+        cookiecutter(
+            template,
+            checkout=checkout,
+            no_input=no_input,
+            extra_context=extra_context,
+            replay=replay,
+            overwrite_if_exists=overwrite_if_exists,
+            output_dir=output_dir,
+            config_file=config_file,
+            default_config=default_config,
+            password=None,
+            directory=directory,
+            skip_if_file_exists=skip_if_file_exists,
+            accept_hooks=accept_hooks,
+            keep_project_on_failure=keep_project_on_failure,
+        )
+    except (ContextDecodingException, OutputDirExistsException,
+            InvalidModeException, FailedHookException,
+            UnknownExtension, InvalidZipRepository,
+            RepositoryNotFound, RepositoryCloneFailed,
+            UndefinedVariableInTemplate) as e:
+        click.echo(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
